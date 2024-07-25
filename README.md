@@ -4,7 +4,7 @@ This is an example application to run a CLIP inference on a video in real-time. 
 
 ## Prerequisites
 
-This example was tested on Hailo's TAPPAS v3.28.0 and TAPPAS-CORE v3.28.2 (RPi version). Ensure that you have these installed on your system.
+This example has been tested with Hailo's TAPPAS v3.28.0 and TAPPAS-CORE v3.28.2 (RPi version). Please ensure that you have one of these versions installed on your system.
 
 #### Required Packages for CLIP
 
@@ -34,12 +34,6 @@ TAPPAS_POST_PROC_DIR set to /usr/lib/aarch64-linux-gnu/hailo/tappas//post-proces
 Device Architecture is set to: HAILO8L
 ```
 
-## C++ Code Compilation
-
-Some C++ code is used in this app for post-processing and cropping. This code should be compiled before running the example. It uses Hailo `pkg-config` to find the required libraries.
-
-The compilation script is `compile_postprocess.sh`. You can run it manually, but it will be executed automatically when installing the package. The post-process `.so` files will be installed under the resources directory.
-
 ## Installation
 
 Make sure you run `source setup_env.sh` before running the installation. To install the application, run the following in the application root directory:
@@ -48,7 +42,7 @@ Make sure you run `source setup_env.sh` before running the installation. To inst
 python3 -m pip install -v -e .
 ```
 
-This will install the app as a Python package in "editable" mode. It will also compile the C++ code and download the required HEF files.
+This will install the app as a Python package in "editable" mode. It will also [compile the CPP code](#cpp-code-compilation) and download the required HEF files and videos.
 
 ## Usage
 
@@ -72,7 +66,8 @@ python3 -m clip_app.clip_app
 ```bash
 clip_app -h
 usage: clip_app [-h] [--input INPUT] [--detector {person,face,none}] [--json-path JSON_PATH] [--disable-sync] [--dump-dot]
-                [--detection-threshold DETECTION_THRESHOLD] [--show-fps] [--enable-callback] [--disable-runtime-prompts]
+                [--detection-threshold DETECTION_THRESHOLD] [--show-fps] [--enable-callback] [--callback-path CALLBACK_PATH]
+                [--disable-runtime-prompts]
 
 Hailo online CLIP app
 
@@ -83,15 +78,17 @@ options:
   --detector {person,face,none}, -d {person,face,none}
                         Which detection pipeline to use.
   --json-path JSON_PATH
-                        Path to json file to load and save embeddings. If not set embeddings.json will be used.
+                        Path to JSON file to load and save embeddings. If not set, embeddings.json will be used.
   --disable-sync        Disables display sink sync, will run as fast as possible. Relevant when using file source.
   --dump-dot            Dump the pipeline graph to a dot file.
   --detection-threshold DETECTION_THRESHOLD
-                        Detection threshold
-  --show-fps, -f        Print FPS on sink
-  --enable-callback     Enables the use of the callback function
+                        Detection threshold.
+  --show-fps, -f        Print FPS on sink.
+  --enable-callback     Enables the use of the callback function.
+  --callback-path CALLBACK_PATH
+                        Path to the custom user callback file.
   --disable-runtime-prompts
-                        When set app will not support runtime prompts. Default is False.
+                        When set, app will not support runtime prompts. Default is False.
 ```
 
 ### Modes
@@ -99,6 +96,35 @@ options:
 - **Default mode (`--detector none`)**: Runs only the CLIP inference on the entire frame. This mode is what CLIP is trained for and will give the best results. CLIP will be run on every frame.
 - **Person mode (`--detector person`)**: Runs the CLIP inference only on detected persons. In this mode, we first run a person detector and then run CLIP on the detected persons. CLIP acts as a person classifier in this mode and will run only on detected persons. To reduce the number of CLIP inferences, we run CLIP only every second per tracked person. This can be changed in the code.
 - **Face mode (`--detector face`)**: Runs the CLIP inference only on detected faces. This is similar to person mode but for faces. Results in this mode are not as good as person mode (cropped faces are probably not well represented in the dataset). You can experiment with it to see if it fits your application.
+
+## UI Controls
+
+![UI Controls](resources/CLIP_UI.png)
+
+- **Threshold Slider**: Adjusts the threshold for CLIP classification. Classifications with probabilities lower than this threshold will be ignored.
+- **Negative Checkbox**: Marks the classification as a negative prompt. It will be included in the Softmax calculation but will not be shown in the output.
+- **Ensemble Checkbox**: Enables ensemble mode, where the prompt text embedding is calculated with variations to improve results. See `ensemble_template` in `text_image_matcher.py` for more details.
+- **Text Description**: The text prompt for CLIP classification.
+- **Probability Bars**: Displays the probability of various classifications in real-time.
+- **Load Button**: Loads the text embeddings from a JSON file specified by the `--json-path` flag.
+- **Save Button**: Saves the text embeddings to a JSON file specified by the `--json-path` flag.
+- **Track ID**: Displays the classification probabilities for a specific person in person mode. The track ID appears in the bottom left corner of the bounding box.
+- **Quit Button**: Exits the application.
+
+## Tips for Good Prompt Usage
+
+- Keep in mind that the network was trained on image + caption pairs. Your text description should be somewhat similar. For example, a text description of "A photo of a cat" will give a better score than "cat".
+- The app has a pre-defined "prefix" of "A photo of a" which you can change in the `TextImageMatcher` class.
+- The pipeline output will select one of the classes as "the best one". There is no `background` class. You should define a "negative" prompt (or prompts) to be used as `background`. When set as `negative`, the class will be used in the "best match" algorithm but will not be shown in the output.
+- You can also use `threshold` to fine-tune detection sensitivity. However, using `negative` prompts is better for detecting specific classes.
+- Negative prompts should be used to "peel off" similar classifications to your target. For example, "a man with a red shirt" will have a high score for just a man or a shirt of a different color. Add negative prompts like "a man with a blue shirt" to ensure you do not get lots of false classifications.
+- Play around with prompts to see what works best for your application.
+
+## Integrating Your Code
+
+You can integrate your code in the `user_callback.py` file. This file includes a user-defined `app_callback` function that is called after the CLIP inference and before the display. You can use it to add your logic to the app. The `app_callback_class` will be passed to the callback function and can be used to access the app's data. 
+To enable executing the callback function, use the `--enable-callback` flag. 
+By default, the application will use `clip_app/user_callback.py` as the callback file. You can change it using the `--callback-path` flag. When setting a custom callback file, the callback will be enabled automatically.
 
 ### Online Text Embeddings
 
@@ -126,30 +152,8 @@ options:
                         A list of texts to add to the matcher; the first one will be the searched text, and the others will be considered negative prompts. Example: --texts-list "cat" "dog" "yellow car".
 ```
 
-## Tips for Good Prompt Usage
+## CPP Code Compilation
 
-- Keep in mind that the network was trained on image + caption pairs. Your text description should be somewhat similar. For example, a text description of "A photo of a cat" will give a better score than "cat".
-- The app has a pre-defined "prefix" of "A photo of a" which you can change in the `TextImageMatcher` class.
-- The pipeline output will select one of the classes as "the best one". There is no `background` class. You should define a "negative" prompt (or prompts) to be used as `background`. When set as `negative`, the class will be used in the "best match" algorithm but will not be shown in the output.
-- You can also use `threshold` to fine-tune detection sensitivity. However, using `negative` prompts is better for detecting specific classes.
-- Negative prompts should be used to "peel off" similar classifications to your target. For example, "a man with a red shirt" will have a high score for just a man or a shirt of a different color. Add negative prompts like "a man with a blue shirt" to ensure you do not get lots of false classifications.
-- Play around with prompts to see what works best for your application.
+Some CPP code is used in this app for post-processing and cropping. This code should be compiled before running the example. It uses Hailo `pkg-config` to find the required libraries.
 
-## Integrating Your Code
-
-You can integrate your code in the `user_callback.py` file. This file includes a user-defined `app_callback` function that is called after the CLIP inference and before the display. You can use it to add your logic to the app. The `app_callback_class` will be passed to the callback function and can be used to access the app's data.
-To enable executing the callback function, use the `--enable-callback` flag.
-
-## UI Controls
-
-![UI Controls](resources/CLIP_UI.png)
-
-- **Threshold Slider**: Adjusts the threshold for CLIP classification. Classifications with probabilities lower than this threshold will be ignored.
-- **Negative Checkbox**: Marks the classification as a negative prompt. It will be included in the Softmax calculation but will not be shown in the output.
-- **Ensemble Checkbox**: Enables ensemble mode, where the prompt text embedding is calculated with variations to improve results. See `ensemble_template` in `text_image_matcher.py` for more details.
-- **Text Description**: The text prompt for CLIP classification.
-- **Probability Bars**: Displays the probability of various classifications in real-time.
-- **Load Button**: Loads the text embeddings from a JSON file specified by the `--json-path` flag.
-- **Save Button**: Saves the text embeddings to a JSON file specified by the `--json-path` flag.
-- **Track ID**: Displays the classification probabilities for a specific person in person mode. The track ID appears in the bottom left corner of the bounding box.
-- **Quit Button**: Exits the application.
+The compilation script is `compile_postprocess.sh`. You can run it manually, but it will be executed automatically when installing the package. The post-process `.so` files will be installed under the resources directory.

@@ -2,11 +2,11 @@
 
 # TAPPAS CORE Definitions
 CORE_VENV_NAME="hailo_tappas_core_venv"
-CORE_REQUIRED_VERSION=("3.28.2" "3.29.0")
+CORE_REQUIRED_VERSION=("3.28.2")
 
 # TAPPAS Definitions
 TAPPAS_VENV_NAME="hailo_tappas_venv"
-TAPPAS_REQUIRED_VERSION=("3.28.0" "3.28.1" "3.28.2" "3.29.0")
+TAPPAS_REQUIRED_VERSION=("3.28.0" "3.28.1" "3.28.2")
 
 # Function to check if the script is being sourced
 is_sourced() {
