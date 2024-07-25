@@ -97,6 +97,19 @@ options:
 - **Person mode (`--detector person`)**: Runs the CLIP inference only on detected persons. In this mode, we first run a person detector and then run CLIP on the detected persons. CLIP acts as a person classifier in this mode and will run only on detected persons. To reduce the number of CLIP inferences, we run CLIP only every second per tracked person. This can be changed in the code.
 - **Face mode (`--detector face`)**: Runs the CLIP inference only on detected faces. This is similar to person mode but for faces. Results in this mode are not as good as person mode (cropped faces are probably not well represented in the dataset). You can experiment with it to see if it fits your application.
 
+### Using Web Camera Input
+Before running the application, ensure a camera is connected to your device. Use the `--input` flag to specify the camera device, defaulting to `/dev/video0`.
+Verify that the camera device you use is mapped to a supported camera, particularly relevant for the Raspberry Pi. To confirm camera support, run the following command:
+
+```bash
+ffplay /dev/video0
+```
+If you see the camera feed, the device is supported. If not, try `/dev/video2`, `/dev/video4`, etc. (devices are usually mapped to an even number).
+Once you identify your camera device, you can run the application as follows:
+```bash
+clip_app --input /dev/video0
+```
+
 ## UI Controls
 
 ![UI Controls](resources/CLIP_UI.png)
